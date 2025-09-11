@@ -10,7 +10,7 @@ private const val BLOCK_SIZE = 1024
 
 data class DataInfo(
     val recordType: String,
-    val order: Int,
+    val recordNo: Int,
     val requestType: String,
     val crn: Int,
     val orgCode: String,
@@ -26,6 +26,11 @@ data class DataInfo(
     val spareField2: String
 )
 val fieldLengths = listOf(1, 10, 1, 10, 20, 10, 30, 3, 20, 8, 1, 1, 4, 7, 274)
+
+data class IndexAndRecordNo(
+    val index: Int,
+    val recordNo: Int
+)
 
 class CheckResponseFileForPostInspection(val filePath: String) {
 
@@ -44,20 +49,22 @@ class CheckResponseFileForPostInspection(val filePath: String) {
 
             val buffer = ByteBuffer.allocate(BLOCK_SIZE)
             var blockIndex = 0
-            var expectedNextDataInfoBlockIndex: Int = 1
+            var expectedNextDataInfoBlockIndex = 1
+            var currentRecordNo = 1
 
             while (channel.read(buffer) > 0) {
                 buffer.flip()
                 val blockData = ByteArray(buffer.remaining())
                 buffer.get(blockData)
 
-                // 여기에 각 블록 처리 로직 추가
+                // process each block
                 if (blockIndex == expectedNextDataInfoBlockIndex) {
-                    val requiredBlockCounts: Int = processBlock(blockData, blockIndex)
-                    if (requiredBlockCounts == -1) {
+                    val requiredBlockCounts: IndexAndRecordNo = processBlock(blockData, IndexAndRecordNo(blockIndex, currentRecordNo))
+                    if (requiredBlockCounts.index == -1) {
                         return
                     }
-                    expectedNextDataInfoBlockIndex += requiredBlockCounts
+                    expectedNextDataInfoBlockIndex += requiredBlockCounts.index
+                    currentRecordNo = requiredBlockCounts.recordNo
                 }
 
                 buffer.clear()
@@ -73,19 +80,19 @@ class CheckResponseFileForPostInspection(val filePath: String) {
      * @param index
      * @return
      */
-    fun processBlock(data: ByteArray, index: Int): Int {
+    fun processBlock(data: ByteArray, currentIndex: IndexAndRecordNo): IndexAndRecordNo {
         printBlock(data.copyOf(400))
         try {
             val dataRecord: DataInfo = extractDataInfo(data)
-            println("[index: $index] dataRecord.agreementDataLength + dataInfoSize: ${dataRecord.agreementDataLength + 400}")
+            println("[index: ${currentIndex.index}, recordNo: ${dataRecord.recordNo}] dataRecord.agreementDataLength + dataInfoSize: ${dataRecord.agreementDataLength + 400}")
 
             val requiredBlockCounts = ceil((dataRecord.agreementDataLength + 400) / BLOCK_SIZE.toDouble()).toInt()
-            println("[index: $index] required block counts: $requiredBlockCounts")
+            println("[index: ${currentIndex.index}, recordNo: ${dataRecord.recordNo}] required block counts: $requiredBlockCounts")
 
-            return requiredBlockCounts
+            return IndexAndRecordNo(requiredBlockCounts, dataRecord.recordNo)
         } catch (e: Exception) {
-            println("exception occurs at index $index")
-            return -1
+            println("An exception occurred at [index: ${currentIndex.index}, recordNo: ${currentIndex.recordNo}]")
+            return IndexAndRecordNo(-1, currentIndex.recordNo)
         }
     }
 
