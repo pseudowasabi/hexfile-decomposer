@@ -43,6 +43,7 @@ fun processFile(filePath: String) {
         
         val buffer = ByteBuffer.allocate(BLOCK_SIZE)
         var blockIndex = 0
+        var expectedNextDataInfoBlockIndex: Int = 1
         
         while (channel.read(buffer) > 0) {
             buffer.flip()
@@ -50,7 +51,13 @@ fun processFile(filePath: String) {
             buffer.get(blockData)
             
             // 여기에 각 블록 처리 로직 추가
-            processBlock(blockData, blockIndex)
+            if (blockIndex == expectedNextDataInfoBlockIndex) {
+                val requiredBlockCounts: Int = processBlock(blockData, blockIndex)
+                if (requiredBlockCounts == -1) {
+                    return
+                }
+                expectedNextDataInfoBlockIndex += requiredBlockCounts
+            }
             
             buffer.clear()
             blockIndex++
@@ -58,19 +65,21 @@ fun processFile(filePath: String) {
     }
 }
 
-fun processBlock(data: ByteArray, index: Int) {
+fun processBlock(data: ByteArray, index: Int): Int {
 
-    if (index == 0) {
-        println()
-        printBlock(data)
-    } else if (index == 1) {
-        printBlock(data.copyOf(400))
+    printBlock(data.copyOf(400))
 
+    try {
         val dataRecord: DataInfo = extractDataInfo(data)
-        println("dataRecord.agreementDataLength + dataInfoSize: ${dataRecord.agreementDataLength + 400}")
+        println("[index: $index] dataRecord.agreementDataLength + dataInfoSize: ${dataRecord.agreementDataLength + 400}")
 
         val requiredBlockCounts = ceil((dataRecord.agreementDataLength + 400) / BLOCK_SIZE.toDouble()).toInt()
-        println("required block counts: $requiredBlockCounts")
+        println("[index: $index] required block counts: $requiredBlockCounts")
+
+        return requiredBlockCounts
+    } catch (e: Exception) {
+        println("exception occurs at index $index")
+        return -1
     }
 }
 
