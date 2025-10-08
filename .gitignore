@@ -1,3 +1,6 @@
 .idea
 .gradle
-build
+build/classes
+build/kotlin
+build/reports
+build/tmp
